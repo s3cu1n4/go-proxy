@@ -8,6 +8,8 @@ import (
 	"net"
 	"strings"
 	"time"
+
+	"github.com/pibigstar/go-proxy/common/logs"
 )
 
 var (
@@ -49,14 +51,14 @@ func (c *client) Read(ctx context.Context) {
 					c.conn.Write([]byte("pi"))
 					continue
 				}
-				fmt.Println("读取出现错误...")
+				logs.Info("Client data read err")
 				c.exit <- err
 				return
 			}
 
 			// 收到心跳包,则跳过
 			if data[0] == 'p' && data[1] == 'i' {
-				fmt.Println("server收到心跳包")
+				logs.Info("Receive heartbeat packet")
 				continue
 			}
 			c.read <- data[:n]
@@ -130,7 +132,7 @@ func main() {
 	defer func() {
 		err := recover()
 		if err != nil {
-			fmt.Println(err)
+			logs.Error(err)
 		}
 	}()
 
@@ -138,22 +140,20 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("监听:%d端口, 等待client连接... \n", remotePort)
+	logs.Info("Listening: %d Port, waiting client connection... \n", remotePort)
 	// 监听User来连接
 	userListener, err := net.Listen("tcp", fmt.Sprintf(":%d", localPort))
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("监听:%d端口, 等待user连接.... \n", localPort)
-
+	logs.Info("Listening: %d Port, waiting user connection... \n", localPort)
 	for {
 		// 有Client来连接了
 		clientConn, err := clientListener.Accept()
 		if err != nil {
 			panic(err)
 		}
-
-		fmt.Printf("有Client连接: %s \n", clientConn.RemoteAddr())
+		logs.Info("Client: %s connection successfully", clientConn.RemoteAddr())
 
 		client := &client{
 			conn:   clientConn,
@@ -169,7 +169,9 @@ func main() {
 		go HandleClient(client, userConnChan)
 
 		<-client.reConn
-		fmt.Println("重新等待新的client连接..")
+
+		logs.Info("wait to client reconnect")
+
 	}
 }
 
@@ -197,11 +199,12 @@ func HandleClient(client *client, userConnChan chan net.Conn) {
 			user.conn = userConn
 			go handle(ctx, client, user)
 		case err := <-client.exit:
-			fmt.Println("client出现错误, 关闭连接", err.Error())
+			logs.Error("Client connection error, close connection", err.Error())
 			cancel()
 			return
 		case err := <-user.exit:
-			fmt.Println("user出现错误，关闭连接", err.Error())
+			// fmt.Println("user出现错误，关闭连接", err.Error())
+			logs.Error("User connection error, close connection", err.Error())
 			cancel()
 			return
 		}
@@ -236,6 +239,7 @@ func AcceptUserConn(userListener net.Listener, connChan chan net.Conn) {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("user connecta: %s \n", userConn.RemoteAddr())
+	logs.Info("User: %s connection successfully", userConn.RemoteAddr())
+
 	connChan <- userConn
 }

@@ -1,3 +1,3 @@
-module github.com/pibigstar/go-proxy
+module go-proxy
 
-go 1.13
+go 1.16
