@@ -236,6 +236,6 @@ func AcceptUserConn(userListener net.Listener, connChan chan net.Conn) {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("user connect: %s \n", userConn.RemoteAddr())
+	fmt.Printf("user connecta: %s \n", userConn.RemoteAddr())
 	connChan <- userConn
 }
