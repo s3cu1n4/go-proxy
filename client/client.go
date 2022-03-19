@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"go-proxy/common/logs"
 	"io"
 	"net"
 	"strings"
@@ -52,14 +53,15 @@ func (s *server) Read(ctx context.Context) {
 					s.conn.Write([]byte("pi"))
 					continue
 				}
-				fmt.Println("从server读取数据失败, ", err.Error())
+				logs.Error("Server data read err", err.Error())
 				s.exit <- err
 				return
 			}
 
 			// 如果收到心跳包, 则跳过
 			if data[0] == 'p' && data[1] == 'i' {
-				fmt.Println("client收到心跳包")
+				logs.Info("Receive heartbeat packet")
+				// fmt.Println("client收到心跳包")
 				continue
 			}
 			s.read <- data[:n]
@@ -134,8 +136,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-
-		fmt.Printf("已连接server: %s \n", serverConn.RemoteAddr())
+		logs.Infof("Connected servers: %s \n", serverConn.RemoteAddr())
 		server := &server{
 			conn:   serverConn,
 			read:   make(chan []byte),
@@ -146,7 +147,6 @@ func main() {
 
 		go handle(server)
 		<-server.reConn
-		//_ = server.conn.Close()
 	}
 
 }
@@ -188,11 +188,11 @@ func handle(server *server) {
 			server.write <- data
 
 		case err := <-server.exit:
-			fmt.Printf("server have err: %s", err.Error())
+			logs.Errorf("server have err: %s", err.Error())
 			cancel()
 			return
 		case err := <-local.exit:
-			fmt.Printf("local have err: %s", err.Error())
+			logs.Errorf("Local have err: %s", err.Error())
 			cancel()
 			return
 		}

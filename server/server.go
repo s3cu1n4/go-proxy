@@ -4,12 +4,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"go-proxy/common/logs"
 	"io"
 	"net"
 	"strings"
 	"time"
-
-	"github.com/pibigstar/go-proxy/common/logs"
 )
 
 var (
@@ -140,20 +139,20 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	logs.Info("Listening: %d Port, waiting client connection... \n", remotePort)
+	logs.Infof("Listening: %d Port, waiting client connection... \n", remotePort)
 	// 监听User来连接
 	userListener, err := net.Listen("tcp", fmt.Sprintf(":%d", localPort))
 	if err != nil {
 		panic(err)
 	}
-	logs.Info("Listening: %d Port, waiting user connection... \n", localPort)
+	logs.Infof("Listening: %d Port, waiting user connection... \n", localPort)
 	for {
 		// 有Client来连接了
 		clientConn, err := clientListener.Accept()
 		if err != nil {
 			panic(err)
 		}
-		logs.Info("Client: %s connection successfully", clientConn.RemoteAddr())
+		logs.Infof("Client: %s connection successfully", clientConn.RemoteAddr())
 
 		client := &client{
 			conn:   clientConn,
@@ -239,7 +238,7 @@ func AcceptUserConn(userListener net.Listener, connChan chan net.Conn) {
 	if err != nil {
 		panic(err)
 	}
-	logs.Info("User: %s connection successfully", userConn.RemoteAddr())
+	logs.Infof("User: %s connection successfully", userConn.RemoteAddr())
 
 	connChan <- userConn
 }
