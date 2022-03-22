@@ -144,7 +144,7 @@ func connectLocal() *net.TCPConn {
 func connectRemote() *net.TCPConn {
 	conn, err := CreateTCPConn(remoteServerAddr)
 	if err != nil {
-		logs.Error("Connection to remote server: %s failed, error: %s ", remoteServerAddr, err.Error())
+		logs.Errorf("Connection to remote server: %s failed, error: %s ", remoteServerAddr, err.Error())
 	}
 	return conn
 }
