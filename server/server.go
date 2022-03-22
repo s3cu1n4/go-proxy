@@ -1,244 +1,285 @@
 package main
 
 import (
-	"context"
-	"flag"
-	"fmt"
-	"go-proxy/common/logs"
+	"bufio"
 	"io"
 	"net"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
+
+	"go-proxy/common"
+	"go-proxy/common/network"
+
+	"go-proxy/common/logs"
+)
+
+const (
+	controlAddr = "0.0.0.0:28009"
 )
 
 var (
-	localPort  int
-	remotePort int
+	connectionPool     map[string]*ConnMatch
+	connectionPoolLock sync.Mutex
+	listenerPort       sync.Map
 )
 
-func init() {
-	flag.IntVar(&localPort, "l", 5200, "the user link port")
-	flag.IntVar(&remotePort, "r", 3333, "client listen port")
-}
-
-type client struct {
-	conn net.Conn
-	// 数据传输通道
-	read  chan []byte
-	write chan []byte
-	// 异常退出通道
-	exit chan error
-	// 重连通道
-	reConn chan bool
-}
-
-// 从Client端读取数据
-func (c *client) Read(ctx context.Context) {
-	// 如果10秒钟内没有消息传输，则Read函数会返回一个timeout的错误
-	_ = c.conn.SetReadDeadline(time.Now().Add(time.Second * 10))
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			data := make([]byte, 10240)
-			n, err := c.conn.Read(data)
-			if err != nil && err != io.EOF {
-				if strings.Contains(err.Error(), "timeout") {
-					// 设置读取时间为3秒，3秒后若读取不到, 则err会抛出timeout,然后发送心跳
-					_ = c.conn.SetReadDeadline(time.Now().Add(time.Second * 3))
-					c.conn.Write([]byte("pi"))
-					continue
-				}
-				logs.Info("Client data read err")
-				c.exit <- err
-				return
-			}
-
-			// 收到心跳包,则跳过
-			if data[0] == 'p' && data[1] == 'i' {
-				logs.Info("Receive heartbeat packet")
-				continue
-			}
-			c.read <- data[:n]
-		}
-	}
-}
-
-// 将数据写入到Client端
-func (c *client) Write(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case data := <-c.write:
-			_, err := c.conn.Write(data)
-			if err != nil && err != io.EOF {
-				c.exit <- err
-				return
-			}
-		}
-	}
-}
-
-type user struct {
-	conn net.Conn
-	// 数据传输通道
-	read  chan []byte
-	write chan []byte
-	// 异常退出通道
-	exit chan error
-}
-
-// 从User端读取数据
-func (u *user) Read(ctx context.Context) {
-	_ = u.conn.SetReadDeadline(time.Now().Add(time.Second * 200))
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			data := make([]byte, 10240)
-			n, err := u.conn.Read(data)
-			if err != nil && err != io.EOF {
-				u.exit <- err
-				return
-			}
-			u.read <- data[:n]
-		}
-	}
-}
-
-// 将数据写给User端
-func (u *user) Write(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case data := <-u.write:
-			_, err := u.conn.Write(data)
-			if err != nil && err != io.EOF {
-				u.exit <- err
-				return
-			}
-		}
-	}
+type ConnMatch struct {
+	addTime time.Time
+	accept  *net.TCPConn
+	port    int64
 }
 
 func main() {
-	flag.Parse()
+	connectionPool = make(map[string]*ConnMatch, 1024)
+	logs.Info(common.GetCurrentDirectory())
+	go createControlChannel()
+	cleanConnectionPool()
+}
 
-	defer func() {
-		err := recover()
+// 创建一个控制通道，用于传递控制消息，如：心跳，创建新连接
+func createControlChannel() {
+	tcpListener, err := network.CreateTCPListener(controlAddr)
+	if err != nil {
+		panic(err)
+	}
+
+	logs.Infof("Control listening: %s started successfully", controlAddr)
+
+	for {
+		var isauth bool
+		t1 := time.Now()
+
+		tcpConn, err := tcpListener.AcceptTCP()
+
 		if err != nil {
-			logs.Error(err)
+			logs.Error(err.Error())
+			continue
+		}
+
+		logs.Infof("NewConn: %s to control port", tcpConn.RemoteAddr().String())
+
+		go func() {
+			for range time.Tick(10 * time.Second) {
+				if time.Since(t1) > 5*time.Second {
+					if !isauth {
+						logs.Errorf("Get connection handler data error: %s ", tcpConn.RemoteAddr().String())
+						tcpConn.Close()
+						return
+					}
+
+				}
+			}
+		}()
+
+		reader := bufio.NewReader(tcpConn)
+
+		for {
+			s, err := reader.ReadString('\n')
+			if err != nil || err == io.EOF {
+				logs.Errorf("Read remote control data error: %s", err.Error())
+				time.Sleep(5 * time.Second)
+				break
+			}
+			if s == network.AuthHandleData+"\n" {
+				isauth = true
+				continue
+			}
+
+			setport := strings.Split(strings.Replace(s, "\n", "", -1), ":")
+			logs.Info("setport", setport)
+
+			var port int64
+
+			if len(setport) == 2 && setport[0] == "SETPORT" {
+				port, err = strconv.ParseInt(setport[1], 10, 64)
+				if err != nil {
+					logs.Error("Set port error ", err.Error())
+					setTunPortErr(tcpConn)
+					break
+				}
+
+			}
+			go newkeepAlive(tcpConn, port)
+			break
+
+		}
+
+	}
+}
+
+func newkeepAlive(Conn *net.TCPConn, port int64) {
+	if !checkPortIsOpen(port) {
+		sendMessage(network.SetTunnelERROR, Conn)
+		Conn.Close()
+		return
+	}
+
+	go AcceptUserRequest(port, Conn)
+	go AcceptClientRequest(port)
+
+	go func() {
+		for {
+			if Conn == nil {
+				return
+			}
+			_, err := Conn.Write(([]byte)(network.KeepAlive + "\n"))
+
+			if err != nil {
+				logs.Error("ClientConn stop:", Conn.RemoteAddr().String())
+				// Conn = nil
+				Conn.Close()
+				closeListenerPort(port)
+				return
+			}
+
+			time.Sleep(time.Second * 3)
 		}
 	}()
+}
 
-	clientListener, err := net.Listen("tcp", fmt.Sprintf(":%d", remotePort))
+func checkPortIsOpen(port int64) bool {
+	l, err := net.Listen("tcp", ":"+strconv.FormatInt(port, 10))
 	if err != nil {
-		panic(err)
+		logs.Errorf("Port %s is open:", err.Error())
+		return false
 	}
-	logs.Infof("Listening: %d Port, waiting client connection... \n", remotePort)
-	// 监听User来连接
-	userListener, err := net.Listen("tcp", fmt.Sprintf(":%d", localPort))
+	defer l.Close()
+
+	l, err = net.Listen("tcp", ":"+strconv.FormatInt(port+1, 10))
 	if err != nil {
-		panic(err)
+		logs.Errorf("Port %s is open:", err.Error())
+		return false
 	}
-	logs.Infof("Listening: %d Port, waiting user connection... \n", localPort)
+	defer l.Close()
+
+	logs.Info("check port is open success:", port)
+
+	return true
+}
+
+// 监听来自用户的请求
+func AcceptUserRequest(port int64, controlConn *net.TCPConn) error {
+
+	visitaddr := "0.0.0.0:" + strconv.FormatInt(port+1, 10)
+
+	tcpListener, err := network.CreateTCPListener(visitaddr)
+	if err != nil {
+		logs.Error("Create visit TCP listener error:", err.Error())
+		// listenerPortError = true
+		return err
+	}
+	defer tcpListener.Close()
+	listenerPort.Store(port+1, tcpListener)
+
 	for {
-		// 有Client来连接了
-		clientConn, err := clientListener.Accept()
+		tcpConn, err := tcpListener.AcceptTCP()
 		if err != nil {
-			panic(err)
-		}
-		logs.Infof("Client: %s connection successfully", clientConn.RemoteAddr())
-
-		client := &client{
-			conn:   clientConn,
-			read:   make(chan []byte),
-			write:  make(chan []byte),
-			exit:   make(chan error),
-			reConn: make(chan bool),
+			continue
 		}
 
-		userConnChan := make(chan net.Conn)
-		go AcceptUserConn(userListener, userConnChan)
-
-		go HandleClient(client, userConnChan)
-
-		<-client.reConn
-
-		logs.Info("wait to client reconnect")
-
+		addConn2Pool(tcpConn, port)
+		sendMessage(network.NewConnection, controlConn)
 	}
+
 }
 
-func HandleClient(client *client, userConnChan chan net.Conn) {
-	ctx, cancel := context.WithCancel(context.Background())
+// 接收客户端来的请求并建立隧道
+func AcceptClientRequest(port int64) error {
 
-	go client.Read(ctx)
-	go client.Write(ctx)
-
-	user := &user{
-		read:  make(chan []byte),
-		write: make(chan []byte),
-		exit:  make(chan error),
-	}
-
-	defer func() {
-		_ = client.conn.Close()
-		_ = user.conn.Close()
-		client.reConn <- true
-	}()
-
-	for {
-		select {
-		case userConn := <-userConnChan:
-			user.conn = userConn
-			go handle(ctx, client, user)
-		case err := <-client.exit:
-			logs.Error("Client connection error, close connection", err.Error())
-			cancel()
-			return
-		case err := <-user.exit:
-			// fmt.Println("user出现错误，关闭连接", err.Error())
-			logs.Error("User connection error, close connection", err.Error())
-			cancel()
-			return
-		}
-	}
-}
-
-// 将两个Socket通道链接
-// 1. 将从user收到的信息发给client
-// 2. 将从client收到信息发给user
-func handle(ctx context.Context, client *client, user *user) {
-	go user.Read(ctx)
-	go user.Write(ctx)
-
-	for {
-		select {
-		case userRecv := <-user.read:
-			// 收到从user发来的信息
-			client.write <- userRecv
-		case clientRecv := <-client.read:
-			// 收到从client发来的信息
-			user.write <- clientRecv
-
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-// 等待user连接
-func AcceptUserConn(userListener net.Listener, connChan chan net.Conn) {
-	userConn, err := userListener.Accept()
+	tunneladdr := "0.0.0.0:" + strconv.FormatInt(port, 10)
+	tcpListener, err := network.CreateTCPListener(tunneladdr)
 	if err != nil {
-		panic(err)
+		logs.Error("acceptClientRequest err", err.Error())
+		return err
 	}
-	logs.Infof("User: %s connection successfully", userConn.RemoteAddr())
+	defer tcpListener.Close()
+	listenerPort.Store(port, tcpListener)
 
-	connChan <- userConn
+	for {
+		tcpConn, err := tcpListener.AcceptTCP()
+		if err != nil {
+			continue
+		}
+		go establishTunnel(tcpConn, port)
+	}
+}
+
+//客户端退出，关闭端口监听
+func closeListenerPort(port int64) {
+	logs.Infof("Listening port close: %d,%d", port, port+1)
+	if v, ok := listenerPort.Load(port); ok {
+		err := v.(*net.TCPListener).Close()
+		if err != nil {
+			logs.Error("close port err:", err.Error)
+		}
+	}
+	if v, ok := listenerPort.Load(port + 1); ok {
+		err := v.(*net.TCPListener).Close()
+		if err != nil {
+			logs.Error("close port err:", err.Error)
+		}
+	}
+}
+
+// 将用户来的连接放入连接池中
+func addConn2Pool(accept *net.TCPConn, port int64) {
+	connectionPoolLock.Lock()
+	defer connectionPoolLock.Unlock()
+	now := time.Now()
+
+	connectionPool[strconv.FormatInt(now.UnixNano(), 10)] = &ConnMatch{now, accept, port}
+}
+
+// 发送给客户端新消息
+func sendMessage(message string, controlConn *net.TCPConn) {
+	logs.Info("sendMessage:", message, controlConn.RemoteAddr().String())
+	if controlConn == nil {
+		logs.Info("No client connection")
+		return
+	}
+	_, err := controlConn.Write([]byte(message + "\n"))
+	if err != nil {
+		logs.Error("send message error:", message)
+	}
+}
+
+func establishTunnel(tunnel *net.TCPConn, port int64) {
+
+	connectionPoolLock.Lock()
+
+	defer connectionPoolLock.Unlock()
+
+	for key, connMatch := range connectionPool {
+		if connMatch.accept != nil {
+			if connMatch.port == port {
+				go network.Join2Conn(connMatch.accept, tunnel)
+				delete(connectionPool, key)
+				return
+
+			}
+		}
+	}
+	_ = tunnel.Close()
+}
+
+func cleanConnectionPool() {
+	for {
+		connectionPoolLock.Lock()
+		for key, connMatch := range connectionPool {
+			if time.Since(connMatch.addTime) > time.Second*10 {
+				_ = connMatch.accept.Close()
+				delete(connectionPool, key)
+			}
+		}
+		connectionPoolLock.Unlock()
+		time.Sleep(5 * time.Second)
+	}
+}
+
+func setTunPortErr(Conn *net.TCPConn) (err error) {
+	_, err = Conn.Write(([]byte)(network.SetTunnelERROR + "\n"))
+	Conn.Close()
+	return
 }
