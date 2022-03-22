@@ -88,7 +88,8 @@ func createControlChannel() {
 			}
 
 			setport := strings.Split(strings.Replace(s, "\n", "", -1), ":")
-			logs.Info("setport", setport)
+
+			logs.Info("setport info ", setport)
 
 			var port int64
 
@@ -97,11 +98,13 @@ func createControlChannel() {
 				if err != nil {
 					logs.Error("Set port error ", err.Error())
 					setTunPortErr(tcpConn)
+				}
+				if port > 1000 {
+					go keepAlive(tcpConn, port)
 					break
 				}
-
 			}
-			go keepAlive(tcpConn, port)
+			tcpConn.Close()
 			break
 
 		}
