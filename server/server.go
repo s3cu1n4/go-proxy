@@ -101,7 +101,7 @@ func createControlChannel() {
 				}
 
 			}
-			go newkeepAlive(tcpConn, port)
+			go keepAlive(tcpConn, port)
 			break
 
 		}
@@ -109,7 +109,7 @@ func createControlChannel() {
 	}
 }
 
-func newkeepAlive(Conn *net.TCPConn, port int64) {
+func keepAlive(Conn *net.TCPConn, port int64) {
 	if !checkPortIsOpen(port) {
 		sendMessage(network.SetTunnelERROR, Conn)
 		Conn.Close()
@@ -121,20 +121,19 @@ func newkeepAlive(Conn *net.TCPConn, port int64) {
 
 	go func() {
 		for {
-			if Conn == nil {
-				return
-			}
-			_, err := Conn.Write(([]byte)(network.KeepAlive + "\n"))
+			for range time.Tick(30 * time.Second) {
+				if Conn == nil {
+					return
+				}
+				_, err := Conn.Write(([]byte)(network.KeepAlive + "\n"))
+				if err != nil {
+					logs.Error("ClientConn stop:", Conn.RemoteAddr().String())
+					Conn.Close()
+					closeListenerPort(port)
+					return
+				}
 
-			if err != nil {
-				logs.Error("ClientConn stop:", Conn.RemoteAddr().String())
-				// Conn = nil
-				Conn.Close()
-				closeListenerPort(port)
-				return
 			}
-
-			time.Sleep(time.Second * 3)
 		}
 	}()
 }
@@ -234,7 +233,7 @@ func addConn2Pool(accept *net.TCPConn, port int64) {
 
 // 发送给客户端新消息
 func sendMessage(message string, controlConn *net.TCPConn) {
-	logs.Info("sendMessage:", message, controlConn.RemoteAddr().String())
+	// logs.Info("sendMessage:", message, controlConn.RemoteAddr().String())
 	if controlConn == nil {
 		logs.Info("No client connection")
 		return
