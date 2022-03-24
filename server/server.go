@@ -100,8 +100,15 @@ func createControlChannel() {
 					setTunPortErr(tcpConn)
 				}
 				if port > 1000 {
-					go keepAlive(tcpConn, port)
-					break
+					if !checkPortIsOpen(port) {
+						sendMessage(network.SetTunnelERROR, tcpConn)
+						tcpConn.Close()
+						break
+					} else {
+						go keepAlive(tcpConn, port)
+						break
+					}
+
 				}
 			}
 			tcpConn.Close()
@@ -113,11 +120,6 @@ func createControlChannel() {
 }
 
 func keepAlive(Conn *net.TCPConn, port int64) {
-	if !checkPortIsOpen(port) {
-		sendMessage(network.SetTunnelERROR, Conn)
-		Conn.Close()
-		return
-	}
 
 	go AcceptUserRequest(port, Conn)
 	go AcceptClientRequest(port)
@@ -169,7 +171,6 @@ func AcceptUserRequest(port int64, controlConn *net.TCPConn) error {
 	tcpListener, err := network.CreateTCPListener(visitaddr)
 	if err != nil {
 		logs.Error("Create visit TCP listener error:", err.Error())
-		// listenerPortError = true
 		return err
 	}
 	defer tcpListener.Close()

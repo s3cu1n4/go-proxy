@@ -1,3 +1,5 @@
-build
+build/client*
+build/server
+build/linux*
 vendor
 *.txt
