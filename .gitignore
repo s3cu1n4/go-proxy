@@ -1,5 +1,4 @@
-build/client*
-build/server
-build/linux*
+build/*client*
+build/*server
 vendor
 *.txt
