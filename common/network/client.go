@@ -69,7 +69,7 @@ func ClientRun() {
 				checkstatus = true
 				go func() {
 					for range time.Tick(10 * time.Second) {
-						if time.Since(t1) > 10*time.Second {
+						if time.Since(t1) > 11*time.Second {
 							logs.Info("keepalive timeout")
 							tcpConn.Close()
 							return
@@ -84,8 +84,6 @@ func ClientRun() {
 				time.Sleep(5 * time.Second)
 				break
 			}
-
-			logs.Info(s)
 
 			if s == SetTunnelERROR+"\n" {
 				logs.Info("Set tunnel port error")
