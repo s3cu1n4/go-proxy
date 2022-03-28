@@ -2,3 +2,4 @@ build/*client*
 build/*server
 vendor
 *.txt
+bin/conf.yaml
