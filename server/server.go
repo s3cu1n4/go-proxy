@@ -60,9 +60,10 @@ func createControlChannel() {
 
 		logs.Infof("NewConn: %s to control port", tcpConn.RemoteAddr().String())
 
+		//10秒钟内未认证成功，则关闭连接
 		go func() {
 			for range time.Tick(10 * time.Second) {
-				if time.Since(t1) > 5*time.Second {
+				if time.Since(t1) > 10*time.Second {
 					if !isauth {
 						logs.Errorf("Get connection handler data error: %s ", tcpConn.RemoteAddr().String())
 						tcpConn.Close()
@@ -125,39 +126,21 @@ func keepAlive(Conn *net.TCPConn, port int64) {
 	go AcceptClientRequest(port)
 
 	go func() {
-<<<<<<< HEAD
-		for {
-			for range time.Tick(30 * time.Second) {
-				if Conn == nil {
-					return
-				}
-				_, err := Conn.Write(([]byte)(network.KeepAlive + "\n"))
-				if err != nil {
-					logs.Error("ClientConn stop:", Conn.RemoteAddr().String())
-					Conn.Close()
-					closeListenerPort(port)
-					return
-				}
 
-			}
-		}
-=======
-
-		for range time.Tick(30 * time.Second) {
+		for range time.Tick(5 * time.Second) {
 			if Conn == nil {
 				return
 			}
 			_, err := Conn.Write(([]byte)(network.KeepAlive + "\n"))
 			if err != nil {
-				logs.Error("ClientConn stop:", Conn.RemoteAddr().String())
-				Conn.Close()
+				logs.Error("Client Conn stop:", Conn.RemoteAddr().String())
 				closeListenerPort(port)
+				Conn.Close()
 				return
 			}
 
 		}
 
->>>>>>> e5f274badbf095232de677f87fa24b0642448269
 	}()
 }
 
@@ -182,14 +165,14 @@ func checkPortIsOpen(port int64) bool {
 }
 
 // 监听来自用户的请求
-func AcceptUserRequest(port int64, controlConn *net.TCPConn) error {
+func AcceptUserRequest(port int64, controlConn *net.TCPConn) {
 
 	visitaddr := "0.0.0.0:" + strconv.FormatInt(port+1, 10)
 
 	tcpListener, err := network.CreateTCPListener(visitaddr)
 	if err != nil {
 		logs.Error("Create visit TCP listener error:", err.Error())
-		return err
+		return
 	}
 	defer tcpListener.Close()
 	listenerPort.Store(port+1, tcpListener)
@@ -197,7 +180,8 @@ func AcceptUserRequest(port int64, controlConn *net.TCPConn) error {
 	for {
 		tcpConn, err := tcpListener.AcceptTCP()
 		if err != nil {
-			continue
+			logs.Error("AcceptUserRequest listener err:", err.Error())
+			break
 		}
 
 		addConn2Pool(tcpConn, port)
@@ -221,10 +205,12 @@ func AcceptClientRequest(port int64) error {
 	for {
 		tcpConn, err := tcpListener.AcceptTCP()
 		if err != nil {
-			continue
+			logs.Error("AcceptClientRequest listener err:", err.Error())
+			break
 		}
 		go establishTunnel(tcpConn, port)
 	}
+	return err
 }
 
 //客户端退出，关闭端口监听
