@@ -11,3 +11,10 @@ go build -a -o bin\client.exe  .\client\main.go
 set GOARCH=amd64
 set GOOS=darwin
 go build -a -o bin\darwin_server .\server\server.go
+
+
+
+@REM build linux server
+set GOARCH=amd64
+set GOOS=linux
+go build -a -o bin\linux_server .\server\server.go
