@@ -125,21 +125,21 @@ func keepAlive(Conn *net.TCPConn, port int64) {
 	go AcceptClientRequest(port)
 
 	go func() {
-		for {
-			for range time.Tick(30 * time.Second) {
-				if Conn == nil {
-					return
-				}
-				_, err := Conn.Write(([]byte)(network.KeepAlive + "\n"))
-				if err != nil {
-					logs.Error("ClientConn stop:", Conn.RemoteAddr().String())
-					Conn.Close()
-					closeListenerPort(port)
-					return
-				}
 
+		for range time.Tick(30 * time.Second) {
+			if Conn == nil {
+				return
 			}
+			_, err := Conn.Write(([]byte)(network.KeepAlive + "\n"))
+			if err != nil {
+				logs.Error("ClientConn stop:", Conn.RemoteAddr().String())
+				Conn.Close()
+				closeListenerPort(port)
+				return
+			}
+
 		}
+
 	}()
 }
 
