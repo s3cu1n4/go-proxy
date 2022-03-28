@@ -125,6 +125,7 @@ func keepAlive(Conn *net.TCPConn, port int64) {
 	go AcceptClientRequest(port)
 
 	go func() {
+<<<<<<< HEAD
 		for {
 			for range time.Tick(30 * time.Second) {
 				if Conn == nil {
@@ -140,6 +141,23 @@ func keepAlive(Conn *net.TCPConn, port int64) {
 
 			}
 		}
+=======
+
+		for range time.Tick(30 * time.Second) {
+			if Conn == nil {
+				return
+			}
+			_, err := Conn.Write(([]byte)(network.KeepAlive + "\n"))
+			if err != nil {
+				logs.Error("ClientConn stop:", Conn.RemoteAddr().String())
+				Conn.Close()
+				closeListenerPort(port)
+				return
+			}
+
+		}
+
+>>>>>>> e5f274badbf095232de677f87fa24b0642448269
 	}()
 }
 
