@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,7 +52,8 @@ func main() {
 func createControlChannel(controlAddr, serverhandlerkey string) {
 	tcpListener, err := network.CreateTCPListener(controlAddr)
 	if err != nil {
-		panic(err)
+		logs.Fatal(err.Error())
+		os.Exit(-1)
 	}
 
 	logs.Infof("Control listening: %s started successfully", controlAddr)

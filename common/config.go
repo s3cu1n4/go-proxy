@@ -2,6 +2,7 @@ package common
 
 import (
 	"go-proxy/common/logs"
+	"os"
 
 	"github.com/spf13/viper"
 )
@@ -38,7 +39,8 @@ func GetConfig(filename string) {
 
 	err = viper.Unmarshal(Conf)
 	if err != nil {
-		panic(err)
+		logs.Fatal(err.Error())
+		os.Exit(1)
 	}
 
 }
