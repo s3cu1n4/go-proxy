@@ -16,6 +16,7 @@ type Server struct {
 	ServerHost        string `mapstructure:"serverhost"`
 	ServerPort        string `mapstructure:"serverport"`
 	ServerControlPort string `mapstructure:"controlport"`
+	ServerHandlerKey  string `mapstructure:"serverhandlerkey"`
 	LocalPort         string `mapstructure:"localport"`
 }
 
@@ -30,7 +31,9 @@ func GetConfig(filename string) {
 		Conf.Server.ServerControlPort = "28009"
 		Conf.Server.LocalPort = "3389"
 		Conf.Server.ServerPort = "28008"
-		Conf.Server.ServerHost = "118.24.149.229"
+		Conf.Server.ServerHost = "127.0.0.1"
+		Conf.Server.ServerHandlerKey = "handler_key"
+
 	}
 
 	err = viper.Unmarshal(Conf)
