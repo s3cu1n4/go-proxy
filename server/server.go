@@ -43,12 +43,12 @@ func main() {
 
 	connectionPool = make(map[string]*ConnMatch, 1024)
 	logs.Info(common.GetCurrentDirectory())
-	go createControlChannel(controlAddr)
+	go createControlChannel(controlAddr, ServerHandlerKey)
 	cleanConnectionPool()
 }
 
 // 创建一个控制通道，用于传递控制消息，如：心跳，创建新连接
-func createControlChannel(controlAddr string) {
+func createControlChannel(controlAddr, serverhandlerkey string) {
 	tcpListener, err := network.CreateTCPListener(controlAddr)
 	if err != nil {
 		panic(err)
@@ -92,7 +92,7 @@ func createControlChannel(controlAddr string) {
 				time.Sleep(5 * time.Second)
 				break
 			}
-			if s == network.AuthHandleData+"\n" {
+			if s == serverhandlerkey+"\n" {
 				isauth = true
 				continue
 			}
