@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"flag"
+	"fmt"
 	"io"
 	"net"
 	"strconv"
@@ -13,10 +15,6 @@ import (
 	"go-proxy/common/network"
 
 	"go-proxy/common/logs"
-)
-
-const (
-	controlAddr = "0.0.0.0:28009"
 )
 
 var (
@@ -32,14 +30,25 @@ type ConnMatch struct {
 }
 
 func main() {
+
+	var controlport int64
+	var ServerHandlerKey string
+	flag.Int64Var(&controlport, "p", 28009, "Server control port")
+
+	flag.StringVar(&ServerHandlerKey, "k", "handler_key", "客户端认证key")
+	flag.Parse()
+
+	controlAddr := fmt.Sprintf("0.0.0.0:%d", controlport)
+	logs.Infof("Listening control port: %s", controlAddr)
+
 	connectionPool = make(map[string]*ConnMatch, 1024)
 	logs.Info(common.GetCurrentDirectory())
-	go createControlChannel()
+	go createControlChannel(controlAddr)
 	cleanConnectionPool()
 }
 
 // 创建一个控制通道，用于传递控制消息，如：心跳，创建新连接
-func createControlChannel() {
+func createControlChannel(controlAddr string) {
 	tcpListener, err := network.CreateTCPListener(controlAddr)
 	if err != nil {
 		panic(err)

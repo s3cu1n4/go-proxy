@@ -2,4 +2,5 @@ Server:
   serverhost: 192.168.3.16
   serverport: 8008
   controlport: 8009
+  serverhandlerkey: "handler_key"
   localport: 3389

@@ -105,7 +105,7 @@ func ClientRun() {
 }
 
 func serverAuthHandler(Conn *net.TCPConn) (err error) {
-	_, err = Conn.Write(([]byte)(AuthHandleData + "\n"))
+	_, err = Conn.Write(([]byte)(common.Conf.Server.ServerHandlerKey + "\n"))
 	return
 }
 
