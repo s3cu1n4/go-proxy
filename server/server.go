@@ -94,9 +94,16 @@ func createControlChannel(controlAddr, serverhandlerkey string) {
 				time.Sleep(5 * time.Second)
 				break
 			}
-			if s == serverhandlerkey+"\n" {
-				isauth = true
-				continue
+			if !isauth {
+				if s == serverhandlerkey+"\n" {
+					isauth = true
+					continue
+				} else {
+					logs.Errorf("Auth handler data error: %s", s)
+					tcpConn.Close()
+					break
+				}
+
 			}
 
 			setport := strings.Split(strings.Replace(s, "\n", "", -1), ":")
