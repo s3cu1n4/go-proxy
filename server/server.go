@@ -147,6 +147,8 @@ func keepAlive(Conn *net.TCPConn, port int64) {
 
 		for range time.Tick(5 * time.Second) {
 			if Conn == nil {
+				logs.Error("Client Conn is nil:", Conn.RemoteAddr().String())
+				closeListenerPort(port)
 				return
 			}
 			_, err := Conn.Write(([]byte)(network.KeepAlive + "\n"))

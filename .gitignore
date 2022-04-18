@@ -4,3 +4,4 @@ vendor
 *.txt
 bin/conf.yaml
 .DS_Store
+bin*
