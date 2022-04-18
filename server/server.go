@@ -158,21 +158,20 @@ func keepAlive(Conn *net.TCPConn, port int64) {
 			}
 
 		}
-
 	}()
 }
 
 func checkPortIsOpen(port int64) bool {
 	l, err := net.Listen("tcp", ":"+strconv.FormatInt(port, 10))
 	if err != nil {
-		logs.Errorf("Port %s is open:", err.Error())
+		logs.Errorf("Agent connect port is open, error: %s", err.Error())
 		return false
 	}
 	defer l.Close()
 
 	l, err = net.Listen("tcp", ":"+strconv.FormatInt(port+1, 10))
 	if err != nil {
-		logs.Errorf("Port %s is open:", err.Error())
+		logs.Errorf("User connect port is open, error: %s", err.Error())
 		return false
 	}
 	defer l.Close()
