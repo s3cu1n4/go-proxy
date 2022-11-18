@@ -5,3 +5,5 @@ vendor
 bin/conf.yaml
 .DS_Store
 bin*
+client/main
+client/conf.yaml
